@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dodge Game</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+        body {
+            font-family: 'Press Start 2P', monospace;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #1a1a1a;
+            color: #fff;
+            position: relative;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            background-image: url('https://placehold.co/1920x1080/000000/FFFFFF/png?text=SPACE');
+            background-size: cover;
+            background-position: center;
+            overflow: hidden;
+            border-radius: 12px;
+            box-shadow: 0 0 20px rgba(0, 255, 255, 0.5), 0 0 40px rgba(0, 255, 255, 0.3);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #player {
+            position: absolute;
+            width: 60px;
+            height: 60px;
+            background-size: cover;
+            background-image: url('https://placehold.co/60x60/FF00FF/000000/png?text=PLAYER'); /* Placeholder for the player image */
+            transition: transform 0.05s ease-out;
+            will-change: transform;
+            border-radius: 50%;
+        }
+
+        .obstacle {
+            position: absolute;
+            background-size: cover;
+            will-change: transform, top;
+            border-radius: 50%;
+        }
+
+        #score-display {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            font-size: 2em;
+            text-shadow: 2px 2px #000;
+        }
+
+        #game-over-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            z-index: 10;
+        }
+
+        #final-score {
+            font-size: 3em;
+            margin-bottom: 20px;
+            color: #ff0;
+            text-shadow: 2px 2px #000;
+        }
+
+        #play-again-btn {
+            padding: 15px 30px;
+            font-size: 1.2em;
+            cursor: pointer;
+            border: 2px solid #0ff;
+            background-color: #000;
+            color: #0ff;
+            border-radius: 8px;
+            transition: background-color 0.3s, color 0.3s;
+            box-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+            font-family: 'Press Start 2P', monospace;
+        }
+
+        #play-again-btn:hover {
+            background-color: #0ff;
+            color: #000;
+        }
+
+        @media (max-width: 768px) {
+            #score-display {
+                font-size: 1.5em;
+            }
+            #final-score {
+                font-size: 2em;
+            }
+            #play-again-btn {
+                padding: 10px 20px;
+                font-size: 1em;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <div id="score-display">Score: 0</div>
+        <div id="player"></div>
+
+        <div id="game-over-screen">
+            <h1>Game Over</h1>
+            <div id="final-score">Your Score: 0</div>
+            <button id="play-again-btn">Play Again</button>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Game variables and settings
+            const gameContainer = document.getElementById('game-container');
+            const player = document.getElementById('player');
+            const scoreDisplay = document.getElementById('score-display');
+            const gameOverScreen = document.getElementById('game-over-screen');
+            const finalScoreDisplay = document.getElementById('final-score');
+            const playAgainBtn = document.getElementById('play-again-btn');
+
+            // Set background, player, and obstacle images
+            const backgroundImage = './lesbianflag_highres.png';
+            const playerImage = './good.png';
+            
+            // Array of 5 different obstacle image URLs
+            const obstacleImages = [
+                './evil1.png',
+                './evil2.png',
+                './evil3.png',
+                './evil4.png',
+                './evil5.png'
+            ];
+
+            gameContainer.style.backgroundImage = `url('${backgroundImage}')`;
+            player.style.backgroundImage = `url('${playerImage}')`;
+
+            let score = 0;
+            let gameLoopId;
+            let obstacleIntervalId;
+            let difficultyIntervalId;
+            const obstacles = [];
+
+            // Initial game difficulty settings
+            let obstacleSpawnRate = 1000; // ms
+            let playerSize = 60;
+            let obstacleMinSize = 20;
+            let obstacleMaxSize = 90; // Increased maximum size by ~1.5
+            let minSpeed = 2;
+            let maxSpeed = 5;
+            const playerSpeed = 0.05; // Reduced speed for smoother movement
+
+            // Player position
+            let playerX = gameContainer.clientWidth / 2;
+            let playerY = gameContainer.clientHeight - playerSize - 20;
+
+            // Target position for smooth movement
+            let targetX = playerX;
+            let targetY = playerY;
+
+            // Set initial player position
+            player.style.left = `${playerX}px`;
+            player.style.top = `${playerY}px`;
+
+            // Function to handle player movement (mouse and touch)
+            function handleMovement(event) {
+                event.preventDefault(); // Prevent default touch behavior like scrolling
+                const rect = gameContainer.getBoundingClientRect();
+                let clientX, clientY;
+
+                if (event.type.startsWith('touch')) {
+                    const touch = event.touches[0];
+                    clientX = touch.clientX;
+                    clientY = touch.clientY;
+                } else {
+                    clientX = event.clientX;
+                    clientY = event.clientY;
+                }
+
+                targetX = clientX - rect.left - playerSize / 2;
+                targetY = clientY - rect.top - playerSize / 2;
+            }
+
+            // Function to create a new obstacle
+            function createObstacle() {
+                const size = Math.random() * (obstacleMaxSize - obstacleMinSize) + obstacleMinSize;
+                const obstacle = document.createElement('div');
+                obstacle.classList.add('obstacle');
+                obstacle.style.width = `${size}px`;
+                obstacle.style.height = `${size}px`;
+                obstacle.style.left = `${Math.random() * (gameContainer.clientWidth - size)}px`;
+                obstacle.style.top = `${-size}px`;
+                
+                // Randomly select an image from the array
+                const randomImage = obstacleImages[Math.floor(Math.random() * obstacleImages.length)];
+                obstacle.style.backgroundImage = `url('${randomImage}')`;
+
+                gameContainer.appendChild(obstacle);
+                obstacles.push({
+                    element: obstacle,
+                    y: -size,
+                    x: parseFloat(obstacle.style.left),
+                    size: size,
+                    speed: Math.random() * (maxSpeed - minSpeed) + minSpeed
+                });
+            }
+
+            // Function to update the game state
+            function updateGame() {
+                // Smoothly move the player towards the target position
+                playerX += (targetX - playerX) * playerSpeed;
+                playerY += (targetY - playerY) * playerSpeed;
+
+                // Clamp player position to stay within the game container
+                playerX = Math.max(0, Math.min(playerX, gameContainer.clientWidth - playerSize));
+                playerY = Math.max(0, Math.min(playerY, gameContainer.clientHeight - playerSize));
+
+                player.style.left = `${playerX}px`;
+                player.style.top = `${playerY}px`;
+
+                // Update obstacle positions
+                obstacles.forEach((obstacle, index) => {
+                    obstacle.y += obstacle.speed;
+                    obstacle.element.style.top = `${obstacle.y}px`;
+
+                    // Check for collision
+                    if (
+                        obstacle.x < playerX + playerSize &&
+                        obstacle.x + obstacle.size > playerX &&
+                        obstacle.y < playerY + playerSize &&
+                        obstacle.y + obstacle.size > playerY
+                    ) {
+                        endGame();
+                    }
+
+                    // Remove obstacles that have passed the screen
+                    if (obstacle.y > gameContainer.clientHeight) {
+                        obstacle.element.remove();
+                        obstacles.splice(index, 1);
+                    }
+                });
+
+                // Update score
+                score += 1;
+                scoreDisplay.textContent = `Score: ${score}`;
+            }
+
+            // Function to increase game difficulty over time
+            function increaseDifficulty() {
+                // Increase speed, but cap it at a reasonable number
+                if (maxSpeed < 20) {
+                    minSpeed += 0.5;
+                    maxSpeed += 0.5;
+                }
+                
+                // Increase spawn rate (make it faster), but cap it as well
+                if (obstacleSpawnRate > 200) {
+                    obstacleSpawnRate -= 50;
+                    clearInterval(obstacleIntervalId);
+                    obstacleIntervalId = setInterval(createObstacle, obstacleSpawnRate);
+                }
+            }
+
+            // Function to start the game
+            function startGame() {
+                score = 0;
+                obstacles.length = 0;
+                gameOverScreen.style.display = 'none';
+                gameContainer.querySelectorAll('.obstacle').forEach(obs => obs.remove());
+                gameContainer.addEventListener('mousemove', handleMovement);
+                gameContainer.addEventListener('touchmove', handleMovement);
+
+                // Reset difficulty settings
+                obstacleSpawnRate = 1000;
+                minSpeed = 2;
+                maxSpeed = 5;
+
+                // Set initial player position based on screen size
+                playerX = gameContainer.clientWidth / 2;
+                playerY = gameContainer.clientHeight - playerSize - 20;
+                player.style.left = `${playerX}px`;
+                player.style.top = `${playerY}px`;
+                player.style.transform = `translate(0, 0)`;
+
+                gameLoopId = setInterval(updateGame, 16); // ~60 FPS
+                obstacleIntervalId = setInterval(createObstacle, obstacleSpawnRate);
+                difficultyIntervalId = setInterval(increaseDifficulty, 15000); // Increase difficulty every 15 seconds
+            }
+
+            // Function to end the game
+            function endGame() {
+                clearInterval(gameLoopId);
+                clearInterval(obstacleIntervalId);
+                clearInterval(difficultyIntervalId);
+                gameContainer.removeEventListener('mousemove', handleMovement);
+                gameContainer.removeEventListener('touchmove', handleMovement);
+                finalScoreDisplay.textContent = `Your Score: ${score}`;
+                gameOverScreen.style.display = 'flex';
+            }
+
+            // Play again button event listener
+            playAgainBtn.addEventListener('click', startGame);
+
+            // Start the game on initial load
+            startGame();
+        });
+    </script>
+</body>
+</html>
